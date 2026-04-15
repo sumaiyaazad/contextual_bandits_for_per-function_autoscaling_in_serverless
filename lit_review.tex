@@ -1,0 +1,103 @@
+\documentclass{article}
+
+% Use class style if present; otherwise use standard citation package.
+\IfFileExists{project.sty}{
+  \usepackage[final]{project}
+}{
+  \usepackage[numbers]{natbib}
+}
+
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{graphicx}
+\usepackage{enumitem}
+
+\title{Contextual Bandits for Per-Function Autoscaling in Serverless Systems}
+
+\author{
+  Sumaiya Azad - u1494915 \\
+  Rabeya Hossain - u1591808\\
+  CS6955 Advanced Artificial Intelligence
+}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This proposal will study a simple serverless autoscaling question: how many function instances should we keep warm for the next short time window? If we keep too few warm, users will see cold starts and slower responses. If we keep too many warm, we will pay extra cost. This problem is important because serverless traffic can change quickly, so fixed rules often fail in practice. Our hypothesis will be that a contextual bandit can choose better prewarm levels by using recent traffic and performance signals. We will test this idea in a simulator with steady, bursty, and shifting workloads. We will compare LinUCB and linear Thompson Sampling with fixed and threshold baselines, then evaluate latency, SLA violations, cold starts, cost, cumulative reward, and regret.
+\end{abstract}
+
+\section{Introduction}
+Serverless platforms remove much of the server management work from developers. However, scaling still needs good decisions. When demand suddenly rises and not enough instances are warm, requests face cold-start delay. When demand is low, extra warm instances waste money. Prior studies show that cold starts and bursty traffic are common and can hurt performance~\cite{wang2018peeking,lloyd2018serverless,shahrad2020serverless}.
+
+We will model this as an online decision problem. Every time window, the policy will look at recent workload signals and choose the next prewarm level. We will use contextual bandits because they are easier to implement than full reinforcement learning and still learn from feedback over time.
+
+This project will fit course topics in sequential decision making and learning under uncertainty. Our main research question will be:
+\begin{quote}
+Can contextual bandits learn better per-function prewarming decisions than fixed heuristics under dynamic serverless workloads?
+\end{quote}
+
+\section{Related Work}
+\textbf{Contextual bandits.}
+LinUCB and linear Thompson Sampling are well-known methods for online decisions with context~\cite{li2010contextual,chu2011contextual,agrawal2013thompson,slivkins2019intro}. Most earlier studies use recommendation tasks and click-based rewards. In our project, reward will come from system metrics like latency, cold starts, and cost.
+
+\textbf{Serverless performance and scaling.}
+Measurement studies show that serverless performance is sensitive to workload dynamics and cold starts~\cite{wang2018peeking,lloyd2018serverless,shahrad2020serverless}. These papers motivate adaptive control, but they do not directly compare lightweight contextual-bandit policies for per-function prewarming.
+
+\textbf{Our position relative to prior work.}
+Compared with contextual-bandit papers, our focus will be system behavior rather than user engagement. Compared with serverless systems papers, we will focus on policy learning and a clean baseline comparison. We will aim to show when adaptation is actually useful and when simple rules are already competitive.
+
+\section{Method}
+\textbf{Key idea.}
+We will focus on one control variable: prewarm count. Instead of predicting the full future workload, the policy will directly choose the next prewarm level from current context.
+
+\textbf{Decision setup.}
+For each function and time window $t$, context $x_t$ will include recent request count, short moving averages, burstiness, recent cold starts, and recent latency. We may also add a time-of-day feature for periodic traffic. The action $a_t$ will be chosen from a small set, such as $\{0,1,2,4\}$ warm instances. We will define reward as
+\[
+r_t = -\left(\alpha L_t + \beta V_t + \gamma C_t + \delta W_t\right),
+\]
+where $L_t$ is latency (mean or p95), $V_t$ is SLA violations, $C_t$ is cold starts, and $W_t$ is warm-instance cost. The weights $(\alpha,\beta,\gamma,\delta)$ will control how much we prioritize service quality versus cost.
+
+\textbf{Algorithms and baselines.}
+We will implement LinUCB and linear Thompson Sampling as the main learning methods~\cite{li2010contextual,agrawal2013thompson}. Baselines will be: (1) always prewarm 0, (2) always prewarm 1, (3) always prewarm 2, and (4) a threshold rule based on recent traffic. If we have enough time, we will add an $\epsilon$-greedy contextual baseline.
+
+\textbf{Implementation plan.}
+We will build a discrete-time simulator where each window models incoming demand, warm capacity, service time, and cold-start delay. Every policy will run in the same environment with matched random seeds to keep comparisons fair.
+\newpage
+\section{Experimental Design}
+\textbf{Hypotheses.}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{H1:} Contextual bandits will reduce p95 latency and SLA violations compared with fixed prewarm policies in bursty and non-stationary traffic.
+  \item \textbf{H2:} Contextual bandits will give a better latency-cost tradeoff than threshold heuristics across mixed workload types.
+  \item \textbf{H3:} Linear Thompson Sampling will recover faster than LinUCB after sudden traffic changes.
+\end{enumerate}
+
+\textbf{Domain and data.}
+Our main experiments will use synthetic traffic patterns: steady low load, steady medium load, bursty traffic, periodic spikes, and abrupt shifts. If time permits, we will also test on a trace-inspired workload based on published serverless behavior~\cite{shahrad2020serverless}.
+
+\textbf{Experiments.}
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Workload comparison:} We will run all policies on each workload type with multiple random seeds. We will report mean results and confidence intervals.
+  \item \textbf{Adaptation test:} We will add sudden traffic changes during a run and measure recovery time and post-shift regret.
+  \item \textbf{Reward sensitivity:} We will change $(\alpha,\beta,\gamma,\delta)$ to see whether conclusions stay consistent under different priorities.
+  \item \textbf{Feature ablation:} We will remove context features (for example, burstiness) to identify which signals matter most.
+\end{enumerate}
+
+\textbf{Evaluation criteria.}
+We will evaluate average latency, p95 latency, SLA-violation rate, cold-start count, total cost, cumulative reward, and cumulative regret. We will consider a hypothesis supported when improvements are consistent across random seeds and do not create unacceptable tradeoffs on other key metrics.
+
+\bibliographystyle{plainnat}
+\bibliography{sample}
+
+\end{document}
